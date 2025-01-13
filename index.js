@@ -34,6 +34,8 @@ async function run() {
   try {
     await client.connect();
 
+    const userCollection = client.db("forumHubStore").collection("users");
+
     //auth related APIs
     app.post("/jwt", (req, res) => {
       const user = req.body;
@@ -77,6 +79,19 @@ async function run() {
           sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
         })
         .send({ success: true });
+    });
+
+    //add a new user to the database
+    app.post("/adduser", async (req, res) => {
+      const userData = req.body;
+
+      const user = await userCollection.findOne({ email: userData.email });
+
+      if (!user) {
+        await userCollection.insertOne(userData);
+      }
+
+      res.send({ success: true });
     });
 
     // Send a ping to confirm a successful connection
