@@ -35,6 +35,7 @@ async function run() {
     await client.connect();
 
     const userCollection = client.db("forumHubStore").collection("users");
+    const postCollection = client.db("forumHubStore").collection("posts");
 
     //auth related APIs
     app.post("/jwt", (req, res) => {
@@ -82,7 +83,7 @@ async function run() {
     });
 
     //add a new user to the database
-    app.post("/adduser", async (req, res) => {
+    app.post("/new-user", async (req, res) => {
       const userData = req.body;
 
       const user = await userCollection.findOne({ email: userData.email });
@@ -92,6 +93,40 @@ async function run() {
       }
 
       res.send({ success: true });
+    });
+
+    //get my profile data
+    app.get("/my-profile", verifyToken, async (req, res) => {
+      const userEmail = req.query.email;
+
+      const user = await userCollection.findOne({ email: userEmail });
+      res.send(user);
+    });
+
+    //get posts of a particular user
+
+    app.get("/my-posts", verifyToken, async (req, res) => {
+      const userEmail = req.query.email;
+
+      const posts = await postCollection
+        .find({ authorEmail: userEmail })
+        .toArray();
+      res.send(posts);
+    });
+
+    //add a new post to the database
+    app.post("/new-post", verifyToken, async (req, res) => {
+      const postData = req.body;
+
+      try {
+        await postCollection.insertOne(postData);
+        res.send({ success: true });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal Server Error" });
+      }
     });
 
     // Send a ping to confirm a successful connection
