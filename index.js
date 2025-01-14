@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -39,6 +41,8 @@ async function run() {
     const announcementCollection = client
       .db("forumHubStore")
       .collection("announcements");
+    const commentCollection = client.db("forumHubStore").collection("comments");
+    const tagsCollection = client.db("forumHubStore").collection("tags");
 
     //auth related APIs
     app.post("/jwt", (req, res) => {
@@ -98,11 +102,30 @@ async function run() {
         .send({ success: true });
     });
 
+    //make a user an admin
+    app.patch(
+      "/users/make-admin/",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const userEmail = req.query.email;
+
+        const filter = { email: userEmail };
+        const updateDoc = {
+          $set: {
+            role: "admin",
+          },
+        };
+
+        await userCollection.updateOne(filter, updateDoc);
+
+        res.send({ success: true });
+      }
+    );
+
     //add a new user to the database
     app.post("/new-user", async (req, res) => {
       const userData = req.body;
-
-      console.log(userData);
 
       const user = await userCollection.findOne({ email: userData.email });
 
@@ -133,6 +156,21 @@ async function run() {
         .find({ username: { $regex: query, $options: "i" } })
         .toArray();
       res.send(users);
+    });
+
+    //payment intent API for stripe
+    app.post("/create-payment-intent", async (req, res) => {
+      const { amount } = req.body;
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: parseInt(amount * 100),
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
     });
 
     //add a new post to the database
@@ -229,6 +267,24 @@ async function run() {
     app.get("/announcement-count", async (req, res) => {
       const count = await announcementCollection.estimatedDocumentCount();
       res.send({ count });
+    });
+
+    //add a new tags to the database
+    app.post("/new-tag", verifyToken, verifyAdmin, async (req, res) => {
+      const tagData = req.body;
+
+      const tag = await tagsCollection.findOne({ tagName: tagData.tagName });
+
+      if (!tag) {
+        await tagsCollection.insertOne(tagData);
+      }
+      res.send({ success: true });
+    });
+
+    //get all tags
+    app.get("/all-tags", async (req, res) => {
+      const tags = await tagsCollection.find().toArray();
+      res.send(tags);
     });
 
     // Send a ping to confirm a successful connection
