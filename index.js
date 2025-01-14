@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -71,6 +71,19 @@ async function run() {
       }
     };
 
+    const verifyAdmin = async (req, res, next) => {
+      const userEmail = req.user.email;
+      const user = await userCollection.findOne({ email: userEmail });
+
+      if (user.role === "admin") {
+        next();
+      } else {
+        return res
+          .status(401)
+          .send({ message: "Access Denied! unauthorized user" });
+      }
+    };
+
     //clear cookie on logout
     app.post("/logout", (req, res) => {
       res
@@ -86,12 +99,13 @@ async function run() {
     app.post("/new-user", async (req, res) => {
       const userData = req.body;
 
+      console.log(userData);
+
       const user = await userCollection.findOne({ email: userData.email });
 
       if (!user) {
         await userCollection.insertOne(userData);
       }
-
       res.send({ success: true });
     });
 
@@ -103,8 +117,30 @@ async function run() {
       res.send(user);
     });
 
-    //get posts of a particular user
+    //get all users
+    app.get("/all-users", verifyToken, verifyAdmin, async (req, res) => {
+      const users = await userCollection.find().toArray();
+      res.send(users);
+    });
 
+    //add a new post to the database
+    app.post("/new-post", verifyToken, async (req, res) => {
+      const postData = req.body;
+
+      try {
+        postData.createdAt = new Date();
+
+        await postCollection.insertOne(postData);
+        res.send({ success: true });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    //get posts of a particular user
     app.get("/my-posts", verifyToken, async (req, res) => {
       const userEmail = req.query.email;
 
@@ -114,12 +150,32 @@ async function run() {
       res.send(posts);
     });
 
-    //add a new post to the database
-    app.post("/new-post", verifyToken, async (req, res) => {
-      const postData = req.body;
+    //my recent 3 posts
+    app.get("/my-recent-posts", verifyToken, async (req, res) => {
+      const userEmail = req.query.email;
 
       try {
-        await postCollection.insertOne(postData);
+        const posts = await postCollection
+          .find({ authorEmail: userEmail })
+          .sort({ createdAt: -1 })
+          .limit(3)
+          .toArray();
+
+        res.send(posts);
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    //delete a post
+    app.delete("/delete-post/:id", verifyToken, async (req, res) => {
+      const postId = req.params.id;
+
+      try {
+        await postCollection.deleteOne({ _id: new ObjectId(postId) });
         res.send({ success: true });
       } catch (error) {
         console.error(error);
