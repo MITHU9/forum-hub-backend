@@ -36,6 +36,9 @@ async function run() {
 
     const userCollection = client.db("forumHubStore").collection("users");
     const postCollection = client.db("forumHubStore").collection("posts");
+    const announcementCollection = client
+      .db("forumHubStore")
+      .collection("announcements");
 
     //auth related APIs
     app.post("/jwt", (req, res) => {
@@ -123,6 +126,15 @@ async function run() {
       res.send(users);
     });
 
+    //search users
+    app.get("/search-users", verifyToken, verifyAdmin, async (req, res) => {
+      const query = req.query.q;
+      const users = await userCollection
+        .find({ username: { $regex: query, $options: "i" } })
+        .toArray();
+      res.send(users);
+    });
+
     //add a new post to the database
     app.post("/new-post", verifyToken, async (req, res) => {
       const postData = req.body;
@@ -183,6 +195,40 @@ async function run() {
           .status(500)
           .send({ success: false, message: "Internal Server Error" });
       }
+    });
+
+    //create a new announcement
+    app.post(
+      "/new-announcement",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const announcementData = req.body;
+
+        try {
+          announcementData.createdAt = new Date();
+
+          await announcementCollection.insertOne(announcementData);
+          res.send({ success: true });
+        } catch (error) {
+          console.error(error);
+          res
+            .status(500)
+            .send({ success: false, message: "Internal Server Error" });
+        }
+      }
+    );
+
+    //get all announcements
+    app.get("/all-announcements", async (req, res) => {
+      const announcements = await announcementCollection.find().toArray();
+      res.send(announcements);
+    });
+
+    //get announcement count
+    app.get("/announcement-count", async (req, res) => {
+      const count = await announcementCollection.estimatedDocumentCount();
+      res.send({ count });
     });
 
     // Send a ping to confirm a successful connection
