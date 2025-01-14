@@ -149,6 +149,21 @@ async function run() {
       res.send(users);
     });
 
+    //update user badges
+    app.patch("/update-badge", verifyToken, async (req, res) => {
+      const userEmail = req.query.email;
+
+      const filter = { email: userEmail };
+      const updateDoc = {
+        $set: {
+          badge: "Gold",
+        },
+      };
+      await userCollection.updateOne(filter, updateDoc);
+
+      res.send({ success: true });
+    });
+
     //search users
     app.get("/search-users", verifyToken, verifyAdmin, async (req, res) => {
       const query = req.query.q;
