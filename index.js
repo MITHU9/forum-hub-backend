@@ -205,6 +205,28 @@ async function run() {
       }
     });
 
+    //get all posts
+    app.get("/all-posts", async (req, res) => {
+      const result = await postCollection
+        .aggregate([
+          {
+            $addFields: {
+              votesCount: {
+                $subtract: ["$upVotes", "$downVotes"],
+              },
+            },
+          },
+          {
+            $sort: {
+              createdAt: -1,
+            },
+          },
+        ])
+        .toArray();
+
+      res.send(result);
+    });
+
     //get posts of a particular user
     app.get("/my-posts", verifyToken, async (req, res) => {
       const userEmail = req.query.email;
