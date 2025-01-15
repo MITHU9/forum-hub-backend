@@ -255,6 +255,119 @@ async function run() {
       res.send(comments);
     });
 
+    //Increase upVotes of a post
+    app.post("/post-upvote/:id", verifyToken, async (req, res) => {
+      const { id } = req.params;
+      const { userEmail } = req.body;
+      //console.log(userEmail);
+
+      try {
+        const post = await postCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!post) {
+          return res.status(404).send({ message: "Post not found" });
+        }
+
+        // Check if the user has already voted
+        const existingVote = post.votes?.find(
+          (vote) => vote.userEmail === userEmail
+        );
+
+        if (existingVote) {
+          if (existingVote.voteType === "up") {
+            // Remove upvote
+            await postCollection.updateOne(
+              { _id: new ObjectId(id) },
+              {
+                $pull: { votes: { userEmail } },
+                $inc: { upVotes: -1 },
+              }
+            );
+            return res.send({ message: "Upvote removed" });
+          } else {
+            // Switch vote from down to up
+            await postCollection.updateOne(
+              { _id: new ObjectId(id), "votes.userEmail": userEmail },
+              {
+                $set: { "votes.$.voteType": "up" },
+                $inc: { upVotes: 1, downVotes: -1 },
+              }
+            );
+            return res.send({ message: "Vote switched to upvote" });
+          }
+        } else {
+          // Add new upvote
+          await postCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+              $push: { votes: { userEmail, voteType: "up" } },
+              $inc: { upVotes: 1 },
+            }
+          );
+          return res.send({ message: "Upvote added" });
+        }
+      } catch (error) {
+        console.error("Error in upvote:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+
+    // Handle downvote with toggle functionality
+    app.post("/post-downvote/:id", async (req, res) => {
+      const { id } = req.params; // Post ID
+      const { userEmail } = req.body; // User ID
+
+      try {
+        const post = await postCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!post) {
+          return res.status(404).send({ message: "Post not found" });
+        }
+
+        // Check if the user has already voted
+        const existingVote = post.votes?.find(
+          (vote) => vote.userEmail === userEmail
+        );
+
+        if (existingVote) {
+          if (existingVote.voteType === "down") {
+            // Remove downvote
+            await postCollection.updateOne(
+              { _id: new ObjectId(id) },
+              {
+                $pull: { votes: { userEmail } },
+                $inc: { downVotes: -1 },
+              }
+            );
+            return res.send({ message: "Downvote removed" });
+          } else {
+            // Switch vote from up to down
+            await postCollection.updateOne(
+              { _id: new ObjectId(id), "votes.userId": userEmail },
+              {
+                $set: { "votes.$.voteType": "down" },
+                $inc: { downVotes: 1, upVotes: -1 },
+              }
+            );
+            return res.send({ message: "Vote switched to downvote" });
+          }
+        } else {
+          // Add new downvote
+          await postCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+              $push: { votes: { userEmail, voteType: "down" } },
+              $inc: { downVotes: 1 },
+            }
+          );
+          return res.send({ message: "Downvote added" });
+        }
+      } catch (error) {
+        console.error("Error in downvote:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+
     //get post details
     app.get("/post-details/:id", async (req, res) => {
       const postId = req.params.id;
