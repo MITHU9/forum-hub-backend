@@ -230,7 +230,6 @@ async function run() {
     //post a comment on a post
     app.post("/new-comment", verifyToken, async (req, res) => {
       const { comment } = req.body;
-      //console.log(comment);
       try {
         comment.createdAt = new Date();
 
@@ -250,9 +249,18 @@ async function run() {
 
       const comments = await commentCollection
         .find({ postId })
-        .sort({ createdAt: 1 })
+        .limit(5)
+        .sort({ createdAt: -1 })
         .toArray();
       res.send(comments);
+    });
+
+    //comment count of a post
+    app.get("/comment-count/:id", async (req, res) => {
+      const postId = req.params.id;
+
+      const count = await commentCollection.estimatedDocumentCount({ postId });
+      res.send({ count });
     });
 
     //Increase upVotes of a post
@@ -313,9 +321,9 @@ async function run() {
     });
 
     // Handle downvote with toggle functionality
-    app.post("/post-downvote/:id", async (req, res) => {
-      const { id } = req.params; // Post ID
-      const { userEmail } = req.body; // User ID
+    app.post("/post-downvote/:id", verifyToken, async (req, res) => {
+      const { id } = req.params;
+      const { userEmail } = req.body;
 
       try {
         const post = await postCollection.findOne({ _id: new ObjectId(id) });
@@ -343,7 +351,7 @@ async function run() {
           } else {
             // Switch vote from up to down
             await postCollection.updateOne(
-              { _id: new ObjectId(id), "votes.userId": userEmail },
+              { _id: new ObjectId(id), "votes.userEmail": userEmail },
               {
                 $set: { "votes.$.voteType": "down" },
                 $inc: { downVotes: 1, upVotes: -1 },
