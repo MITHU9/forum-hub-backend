@@ -227,6 +227,28 @@ async function run() {
       res.send(result);
     });
 
+    //sort posts by popularity
+    app.get("/all-posts/sort-by-popularity", async (req, res) => {
+      const result = await postCollection
+        .aggregate([
+          {
+            $addFields: {
+              votesCount: {
+                $subtract: ["$upVotes", "$downVotes"],
+              },
+            },
+          },
+          {
+            $sort: {
+              votesCount: -1,
+            },
+          },
+        ])
+        .toArray();
+
+      res.send(result);
+    });
+
     //get posts of a particular user
     app.get("/my-posts", verifyToken, async (req, res) => {
       const userEmail = req.query.email;
