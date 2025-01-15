@@ -227,6 +227,42 @@ async function run() {
       res.send(result);
     });
 
+    //post a comment on a post
+    app.post("/new-comment", verifyToken, async (req, res) => {
+      const { comment } = req.body;
+      //console.log(comment);
+      try {
+        comment.createdAt = new Date();
+
+        await commentCollection.insertOne(comment);
+        res.send({ success: true });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    //get all comments of a post
+    app.get("/post-comments/:id", async (req, res) => {
+      const postId = req.params.id;
+
+      const comments = await commentCollection
+        .find({ postId })
+        .sort({ createdAt: 1 })
+        .toArray();
+      res.send(comments);
+    });
+
+    //get post details
+    app.get("/post-details/:id", async (req, res) => {
+      const postId = req.params.id;
+
+      const post = await postCollection.findOne({ _id: new ObjectId(postId) });
+      res.send(post);
+    });
+
     //sort posts by popularity
     app.get("/all-posts/sort-by-popularity", async (req, res) => {
       const result = await postCollection
