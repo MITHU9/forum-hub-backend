@@ -43,6 +43,9 @@ async function run() {
       .collection("announcements");
     const commentCollection = client.db("forumHubStore").collection("comments");
     const tagsCollection = client.db("forumHubStore").collection("tags");
+    const searchTermCollection = client
+      .db("forumHubStore")
+      .collection("searchTerms");
 
     //auth related APIs
     app.post("/jwt", (req, res) => {
@@ -162,8 +165,28 @@ async function run() {
 
     //get all users
     app.get("/all-users", verifyToken, verifyAdmin, async (req, res) => {
-      const users = await userCollection.find().toArray();
-      res.send(users);
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const search = req.query.search || "";
+
+      const skip = (page - 1) * limit;
+
+      try {
+        const filter = search
+          ? { username: { $regex: search, $options: "i" } }
+          : {};
+
+        const users = await userCollection
+          .find(filter)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
+
+        res.send(users);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Failed to fetch users" });
+      }
     });
 
     //update user badges
@@ -179,15 +202,6 @@ async function run() {
       await userCollection.updateOne(filter, updateDoc);
 
       res.send({ success: true });
-    });
-
-    //search users
-    app.get("/search-users", verifyToken, verifyAdmin, async (req, res) => {
-      const query = req.query.q;
-      const users = await userCollection
-        .find({ username: { $regex: query, $options: "i" } })
-        .toArray();
-      res.send(users);
     });
 
     //payment intent API for stripe
@@ -224,27 +238,27 @@ async function run() {
 
     //get all posts
     app.get("/all-posts", async (req, res) => {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 5;
+
+      const tag = req.query.searchTerm || "";
+
+      const query = {
+        ...(tag && { tag: { $regex: tag, $options: "i" } }),
+      };
+
+      const skip = (page - 1) * limit;
+
       const result = await postCollection
         .aggregate([
           {
-            $lookup: {
-              from: "commentCollection",
-              localField: "_id",
-              foreignField: "postId",
-              as: "comments",
-            },
+            $match: query,
           },
           {
             $addFields: {
-              commentsCount: { $size: "$comments" },
               votesCount: {
                 $subtract: ["$upVotes", "$downVotes"],
               },
-            },
-          },
-          {
-            $project: {
-              comments: 0,
             },
           },
           {
@@ -252,10 +266,25 @@ async function run() {
               createdAt: -1,
             },
           },
+          {
+            $skip: skip,
+          },
+          {
+            $limit: limit,
+          },
         ])
         .toArray();
 
       res.send(result);
+    });
+
+    //Store search term in the database
+    app.post("/search-term", async (req, res) => {
+      const searchTerm = req.body;
+
+      await searchTermCollection.insertOne(searchTerm);
+
+      res.send({ success: true });
     });
 
     //post a comment on a post
@@ -275,12 +304,34 @@ async function run() {
       }
     });
 
+    //edit profile about me
+    app.patch("/edit-about-me", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const { aboutMe } = req.body;
+
+      try {
+        const filter = { email: email };
+        const updateDoc = {
+          $set: {
+            aboutMe,
+          },
+        };
+
+        await userCollection.updateOne(filter, updateDoc);
+
+        res.send({ success: true });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal Server Error" });
+      }
+    });
+
     //report a comment
     app.patch("/report-comment/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const { feedbacks } = req.body;
-
-      //console.log(feedbacks, id);
 
       try {
         const filter = { _id: new ObjectId(id) };
@@ -341,6 +392,21 @@ async function run() {
         }
       }
     );
+
+    //all users count
+    app.get("/user-count", verifyToken, verifyAdmin, async (req, res) => {
+      const count = await userCollection.estimatedDocumentCount();
+      res.send({ count });
+    });
+
+    //A user post count
+    app.get("/user-post-count", verifyToken, async (req, res) => {
+      const userEmail = req.query.email;
+      const count = await postCollection.countDocuments({
+        authorEmail: userEmail,
+      });
+      res.send({ count });
+    });
 
     //delete a comment
     app.delete("/delete-comment/:id", verifyToken, async (req, res) => {
@@ -519,12 +585,24 @@ async function run() {
       res.send(result);
     });
 
+    //all post count
+    app.get("/post-count", async (req, res) => {
+      const count = await postCollection.estimatedDocumentCount();
+      res.send({ count });
+    });
+
     //get posts of a particular user
     app.get("/my-posts", verifyToken, async (req, res) => {
       const userEmail = req.query.email;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+
+      const skip = (page - 1) * limit;
 
       const posts = await postCollection
         .find({ authorEmail: userEmail })
+        .skip(skip)
+        .limit(limit)
         .toArray();
       res.send(posts);
     });
