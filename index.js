@@ -301,6 +301,62 @@ async function run() {
       }
     });
 
+    //get all reported comments
+    app.get(
+      "/all-reported-comments",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const comments = await commentCollection
+          .find({ feedbacks: { $ne: "", $exists: true } })
+          .toArray();
+        res.send(comments);
+      }
+    );
+
+    //mark a comment as resolved
+    app.patch(
+      "/resolve-comment/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+
+        try {
+          const filter = { _id: new ObjectId(id) };
+          const updateDoc = {
+            $set: {
+              feedbacks: "",
+            },
+          };
+
+          await commentCollection.updateOne(filter, updateDoc);
+
+          res.send({ success: true });
+        } catch (error) {
+          console.error(error);
+          res
+            .status(500)
+            .send({ success: false, message: "Internal Server Error" });
+        }
+      }
+    );
+
+    //delete a comment
+    app.delete("/delete-comment/:id", verifyToken, async (req, res) => {
+      const commentId = req.params.id;
+
+      try {
+        await commentCollection.deleteOne({ _id: new ObjectId(commentId) });
+        res.send({ success: true });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal Server Error" });
+      }
+    });
+
     //get all comments of a post
     app.get("/post-comments/:id", verifyToken, async (req, res) => {
       const postId = req.params.id;
