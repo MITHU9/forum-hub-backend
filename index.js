@@ -110,7 +110,24 @@ async function run() {
       async (req, res) => {
         const userEmail = req.query.email;
 
+        const user = await userCollection.findOne({ email: userEmail });
+
         const filter = { email: userEmail };
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        if (user.role === "admin") {
+          const updateDoc = {
+            $set: {
+              role: "user",
+            },
+          };
+          await userCollection.updateOne(filter, updateDoc);
+          return res.send({ success: true });
+        }
+
         const updateDoc = {
           $set: {
             role: "admin",
@@ -210,10 +227,24 @@ async function run() {
       const result = await postCollection
         .aggregate([
           {
+            $lookup: {
+              from: "commentCollection",
+              localField: "_id",
+              foreignField: "postId",
+              as: "comments",
+            },
+          },
+          {
             $addFields: {
+              commentsCount: { $size: "$comments" },
               votesCount: {
                 $subtract: ["$upVotes", "$downVotes"],
               },
+            },
+          },
+          {
+            $project: {
+              comments: 0,
             },
           },
           {
@@ -232,6 +263,7 @@ async function run() {
       const { comment } = req.body;
       try {
         comment.createdAt = new Date();
+        comment.postId = new ObjectId(comment.postId);
 
         await commentCollection.insertOne(comment);
         res.send({ success: true });
@@ -243,24 +275,49 @@ async function run() {
       }
     });
 
+    //report a comment
+    app.patch("/report-comment/:id", verifyToken, async (req, res) => {
+      const { id } = req.params;
+      const { feedbacks } = req.body;
+
+      //console.log(feedbacks, id);
+
+      try {
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            feedbacks,
+          },
+        };
+
+        await commentCollection.updateOne(filter, updateDoc);
+
+        res.send({ success: true });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal Server Error" });
+      }
+    });
+
     //get all comments of a post
-    app.get("/post-comments/:id", async (req, res) => {
+    app.get("/post-comments/:id", verifyToken, async (req, res) => {
       const postId = req.params.id;
 
       const comments = await commentCollection
-        .find({ postId })
-        .limit(5)
+        .find({ postId: new ObjectId(postId) })
         .sort({ createdAt: -1 })
         .toArray();
       res.send(comments);
     });
 
     //comment count of a post
-    app.get("/comment-count/:id", async (req, res) => {
-      const postId = req.params.id;
-
-      const count = await commentCollection.estimatedDocumentCount({ postId });
-      res.send({ count });
+    app.get("/comment-count", verifyToken, verifyAdmin, async (req, res) => {
+      const userCount = await userCollection.estimatedDocumentCount();
+      const postCount = await postCollection.estimatedDocumentCount();
+      const count = await commentCollection.estimatedDocumentCount();
+      res.send({ count, userCount, postCount });
     });
 
     //Increase upVotes of a post
