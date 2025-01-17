@@ -295,6 +295,12 @@ async function run() {
         comment.postId = new ObjectId(comment.postId);
 
         await commentCollection.insertOne(comment);
+
+        await postCollection.updateOne(
+          { _id: comment.postId },
+          { $inc: { commentsCount: 1 } }
+        );
+
         res.send({ success: true });
       } catch (error) {
         console.error(error);
@@ -434,12 +440,22 @@ async function run() {
       res.send(comments);
     });
 
-    //comment count of a post
+    //comment,user and post count
     app.get("/comment-count", verifyToken, verifyAdmin, async (req, res) => {
       const userCount = await userCollection.estimatedDocumentCount();
       const postCount = await postCollection.estimatedDocumentCount();
       const count = await commentCollection.estimatedDocumentCount();
       res.send({ count, userCount, postCount });
+    });
+
+    //get comments count of a post
+    app.get("/post-comment-count/:id", async (req, res) => {
+      const postId = req.params.id;
+
+      const count = await commentCollection.countDocuments({
+        postId: new ObjectId(postId),
+      });
+      res.send({ count });
     });
 
     //Increase upVotes of a post
