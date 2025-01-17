@@ -245,6 +245,7 @@ async function run() {
 
       const query = {
         ...(tag && { tag: { $regex: tag, $options: "i" } }),
+        visibility: { $ne: "private" },
       };
 
       const skip = (page - 1) * limit;
@@ -282,9 +283,38 @@ async function run() {
     app.post("/search-term", async (req, res) => {
       const searchTerm = req.body;
 
+      searchTerm.createdAt = new Date();
+
       await searchTermCollection.insertOne(searchTerm);
 
       res.send({ success: true });
+    });
+
+    //get recent most popular search terms
+    app.get("/recent-search-terms", async (req, res) => {
+      try {
+        const recentPopularSearch = await searchTermCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$searchTerm",
+                count: { $sum: 1 },
+                latestCreatedAt: { $max: "$createdAt" },
+              },
+            },
+            { $sort: { count: -1, latestCreatedAt: -1 } },
+            { $limit: 3 },
+          ])
+          .toArray();
+
+        res.send(recentPopularSearch);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({
+          error:
+            "An error occurred while fetching the most popular search term.",
+        });
+      }
     });
 
     //post a comment on a post
@@ -622,6 +652,29 @@ async function run() {
         .toArray();
       res.send(posts);
     });
+
+    //update post visibility
+    app.patch(
+      "/update-post-visibility/:postId",
+      verifyToken,
+      async (req, res) => {
+        const { postId } = req.params;
+        const { visibility } = req.body;
+
+        try {
+          await postCollection.updateOne(
+            { _id: new ObjectId(postId) },
+            { $set: { visibility: visibility } }
+          );
+          res.send({ success: true });
+        } catch (error) {
+          console.error(error);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error" });
+        }
+      }
+    );
 
     //my recent 3 posts
     app.get("/my-recent-posts", verifyToken, async (req, res) => {
