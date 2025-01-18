@@ -14,7 +14,7 @@ const port = process.env.PORT || 5000;
 app.use(cookieParser());
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173", "https://forumhub-by-mithu9.netlify.app"],
     credentials: true,
   })
 );
@@ -34,7 +34,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    //await client.connect();
 
     const userCollection = client.db("forumHubStore").collection("users");
     const postCollection = client.db("forumHubStore").collection("posts");
@@ -244,7 +244,7 @@ async function run() {
       const tag = req.query.searchTerm || "";
 
       const query = {
-        ...(tag && { tag: { $regex: tag, $options: "i" } }),
+        ...(tag && { tags: { $regex: tag, $options: "i" } }),
         visibility: { $ne: "private" },
       };
 
@@ -735,7 +735,11 @@ async function run() {
 
     //get all announcements
     app.get("/all-announcements", async (req, res) => {
-      const announcements = await announcementCollection.find().toArray();
+      const announcements = await announcementCollection
+        .find()
+        .limit(3)
+        .sort({ createdAt: -1 })
+        .toArray();
       res.send(announcements);
     });
 
@@ -764,10 +768,10 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     //await client.close();
