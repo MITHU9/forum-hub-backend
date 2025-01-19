@@ -444,12 +444,23 @@ async function run() {
       res.send({ count });
     });
 
-    //delete a comment
+    //delete a reported comment
     app.delete("/delete-comment/:id", verifyToken, async (req, res) => {
       const commentId = req.params.id;
+      const { postId } = req.body;
 
       try {
         await commentCollection.deleteOne({ _id: new ObjectId(commentId) });
+
+        await postCollection.updateOne(
+          {
+            _id: new ObjectId(postId),
+          },
+          {
+            $inc: { commentsCount: -1 },
+          }
+        );
+
         res.send({ success: true });
       } catch (error) {
         console.error(error);
@@ -649,6 +660,7 @@ async function run() {
         .find({ authorEmail: userEmail })
         .skip(skip)
         .limit(limit)
+        .sort({ createdAt: -1 })
         .toArray();
       res.send(posts);
     });
@@ -702,6 +714,9 @@ async function run() {
 
       try {
         await postCollection.deleteOne({ _id: new ObjectId(postId) });
+
+        await commentCollection.deleteMany({ postId: new ObjectId(postId) });
+
         res.send({ success: true });
       } catch (error) {
         console.error(error);
