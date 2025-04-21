@@ -48,11 +48,19 @@ async function run() {
       .collection("searchTerms");
 
     //auth related APIs
-    app.post("/jwt", (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.JWT_SECRET, {
+    app.post("/jwt", async (req, res) => {
+      const { email } = req.body;
+
+      const user = await userCollection.findOne({ email });
+
+      if (!user) {
+        return res.status(401).send({ message: "User not found" });
+      }
+
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
         expiresIn: "5h",
       });
+
       res
         .cookie("token", token, {
           httpOnly: true,
@@ -82,8 +90,8 @@ async function run() {
     };
 
     const verifyAdmin = async (req, res, next) => {
-      const userEmail = req.user.email;
-      const user = await userCollection.findOne({ email: userEmail });
+      const userId = req.user.userId;
+      const user = await userCollection.findOne({ _id: userId });
 
       if (user.role === "admin") {
         next();
@@ -150,7 +158,7 @@ async function run() {
       const user = await userCollection.findOne({ email: userData.email });
 
       if (!user) {
-        await userCollection.insertOne(userData);
+        await userCollection.insertOne({ ...userData, role: "user" });
       }
       res.send({ success: true });
     });
@@ -471,7 +479,7 @@ async function run() {
     });
 
     //get all comments of a post
-    app.get("/post-comments/:id", verifyToken, async (req, res) => {
+    app.get("/post-comments/:id", async (req, res) => {
       const postId = req.params.id;
 
       const comments = await commentCollection
@@ -772,8 +780,9 @@ async function run() {
 
       if (!tag) {
         await tagsCollection.insertOne(tagData);
+        res.send({ success: true });
       }
-      res.send({ success: true });
+      res.send({ success: false });
     });
 
     //get all tags
